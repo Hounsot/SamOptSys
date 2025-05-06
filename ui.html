@@ -1,0 +1,44 @@
+<input type="file" id="fileInput" accept=".csv" />
+<button id="create">submit</button>
+<button id="cancel">cancel</button>
+
+<script>
+  document.getElementById("create").onclick = () => {
+    const file = document.getElementById("fileInput").files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target.result;
+        // Parse CSV content into objects
+        const lines = content.split('\n');
+        const headers = lines[0].split(';');
+        const data = [];
+        
+        for (let i = 1; i < lines.length; i++) {
+          if (lines[i].trim() === '') continue;
+          
+          const values = lines[i].split(';');
+          const entry = {};
+          
+          for (let j = 0; j < headers.length; j++) {
+            let header = headers[j].trim(); // Trim leading/trailing whitespace
+            // Remove surrounding quotes if they exist
+            if (header.startsWith('"') && header.endsWith('"')) {
+              header = header.substring(1, header.length - 1);
+            }
+            entry[header] = values[j]; // Use the cleaned header as the key
+          }
+          
+          data.push(entry);
+        }
+        
+        parent.postMessage({pluginMessage: {type: "importCsv", file: data}}, "*");
+      };
+      reader.readAsText(file);
+    }
+  };
+
+  document.getElementById("cancel").onclick = () => {
+    parent.postMessage({ pluginMessage: { type: "cancel" } }, "*");
+  };
+</script>
