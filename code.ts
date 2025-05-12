@@ -8,7 +8,7 @@ figma.ui.onmessage = async (msg: {type: string, file: any}) => {
     await figma.loadFontAsync({ family: "Suisse Intl", style: "Regular" });
     
     // Example usage (you might call this elsewhere based on your logic)
-    // await figma.loadAllPagesAsync();
+    await figma.loadAllPagesAsync();
     function getTemplates() {
       // we find section and then all the component sets in it
       let section = figma.currentPage.findOne(node => node.type === "SECTION" && node.name === "Template");
@@ -18,9 +18,41 @@ figma.ui.onmessage = async (msg: {type: string, file: any}) => {
       }
       return null;
     }
-    function createFrames(componentSets: ComponentSetNode[], properties: any, texts: any, meta: any) {
+    function unitPage(name: string) {
+      let page = figma.root.findOne(node => node.name === name);
+      if (page) {
+        return page;
+      }
+      let newPage = figma.createPage();
+      newPage.name = name;
+      let projectsFrame = figma.createFrame();
+      projectsFrame.name = "Projects";
+      projectsFrame.layoutMode = "HORIZONTAL";
+      projectsFrame.itemSpacing = 48;
+      projectsFrame.paddingTop = 48;
+      projectsFrame.paddingBottom = 48;
+      projectsFrame.paddingLeft = 48;
+      projectsFrame.primaryAxisSizingMode = "AUTO";
+      projectsFrame.counterAxisSizingMode = "AUTO";
+      projectsFrame.paddingRight = 48;
+      newPage.appendChild(projectsFrame);
+      return newPage;
+    }
+    function createFrames(componentSets: ComponentSetNode[], element: any, page: PageNode) {
+      // find all text layer names inside componentSets
+      let meta = {
+        "Unit": element.Unit,
+        "Project": element.Project,
+        "Channel": element.Channel,
+        "Id": element.Id
+      }
+      let properties = {
+        "Class": element.Class,
+        "ДомРФ": element.Condition1
+      }
+      let tableContent = element
       let autoLayoutFrame = figma.createFrame();
-      autoLayoutFrame.name = meta.Unit + ", " + meta.Project + ", " + meta.Channel;
+      autoLayoutFrame.name = meta.Project + ", " + meta.Id;
       autoLayoutFrame.layoutMode = "VERTICAL";
       autoLayoutFrame.itemSpacing = 24;
       autoLayoutFrame.paddingTop = 48;
@@ -33,40 +65,29 @@ figma.ui.onmessage = async (msg: {type: string, file: any}) => {
         type: "SOLID",
         color: {r: 0.25, g: 0.25, b: 0.25}
       }];
-      figma.currentPage.appendChild(autoLayoutFrame);
-      componentSets.forEach(element => {
+      let projectsFrame = page.findOne(node => node.name === "Projects") as FrameNode;
+      projectsFrame.appendChild(autoLayoutFrame);
+      componentSets.forEach(set => {
         let sizeContainer = figma.createFrame();
         sizeContainer.name = "SizeContainer";
         sizeContainer.layoutMode = "HORIZONTAL";
         sizeContainer.itemSpacing = 24;
         sizeContainer.primaryAxisSizingMode = "AUTO";
         sizeContainer.counterAxisSizingMode = "AUTO";
-        // remove all fills
         sizeContainer.fills = [];
         autoLayoutFrame.appendChild(sizeContainer);
-        texts.Messages.forEach((message: string) => {
-          if (message != "") {
-          let variant = element.defaultVariant;
-          let instance = variant.createInstance();
-          sizeContainer.appendChild(instance);
-
-          try {
-            instance.setProperties(properties);
-          } catch (error) {
-            const defaultVariant = element.defaultVariant;
-            if (defaultVariant) {
-              instance.remove(); // Remove the failed instance
-              instance = defaultVariant.createInstance(); // Create new instance from default
-              sizeContainer.appendChild(instance);
-            }
+        let variant = set.defaultVariant;
+        let instance = variant.createInstance();
+        sizeContainer.appendChild(instance);
+        let textLayers = instance.findAll(node => node.type === "TEXT");
+        textLayers.forEach(e => {
+          if (e.name in tableContent) {
+            let textToChange = instance.findOne(node => node.name === e.name) as TextNode;
+            textToChange.characters = tableContent[e.name]
+          } else {
+            console.log("No table content for", e.name)
           }
-
-          let messageText = instance.findOne(node => node.name === "MessageText") as TextNode;
-          let descriptionText = instance.findOne(node => node.name === "LegalText") as TextNode;
-          messageText.characters = message;
-          descriptionText.characters = texts.Description;
-          }
-        });  
+        });
         let tallestMessage = 0;
         sizeContainer.findAll(node => node.name === "MessageText").forEach(messageText => {
           let messageHeight = messageText.height;
@@ -89,24 +110,10 @@ figma.ui.onmessage = async (msg: {type: string, file: any}) => {
     }
 
     let template = getTemplates()
-    
     msg.file.forEach((element: any) => {
       console.log(element)
-      let meta = {
-        "Unit": element.Unit,
-        "Project": element.Project,
-        "Channel": element.Channel
-      }
-      let properties = {
-        "Class": element.Class,
-        "ДомРФ": element.Condition1
-      }
-      let messages = [element.Message1, element.Message2, element.Message3]
-      let texts = {
-        "Messages": messages,
-        "Description": element.Description
-      }
-      createFrames(template, properties, texts, meta);
+      let page = unitPage(element.Unit);
+      createFrames(template, element, page);
     });
     figma.closePlugin();
   };
