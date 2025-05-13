@@ -13,11 +13,11 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
       // we find section and then all the component sets in it
       let section = figma.currentPage.findOne(
         (node) => node.type === "SECTION" && node.name === "Template"
-      );
+      ) as SectionNode;
       if (section) {
-        const componentSets = section.findAll(
-          (node) => node.type === "COMPONENT_SET"
-        );
+        let componentSets = section.findAll(
+          (node: SceneNode) => node.type === "COMPONENT_SET"
+        ) as ComponentSetNode[];
         return componentSets;
       }
       return null;
@@ -47,7 +47,6 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
         (node) => node.name === "Images"
       ) as SectionNode;
       if (imageSection) {
-        // find group with this title
         let image = imageSection.findOne(
           (node) => node.name === name
         ) as GroupNode;
@@ -106,116 +105,71 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
             overrides[prop] = element[prop];
           }
         }
-        instance.setProperties(overrides);
+        try {
+          instance.setProperties(overrides);
+        } catch (error) {
+          console.log("Properties not set", error);
+        }
         await Promise.resolve();
         // text overrides
-        for (const text of instance.findAll(n => n.type === "TEXT") as TextNode[]) {
+        for (let text of instance.findAll(n => n.type === "TEXT") as TextNode[]) {
           if (element[text.name] !== undefined) {
             text.characters = element[text.name];
           }
         }
         sizeContainer.appendChild(instance);
+        instance.detachInstance();
         // set image
-        let imageContainer = instance.findOne(n => n.name === "PicPlate") as FrameNode;
-        if (imageContainer) {
+        if (sizeContainer.findOne(n => n.name === "PicPlate") as any) {
+          let imageContainer = sizeContainer.findOne(n => n.name === "PicPlate") as any;
           let render = getImage(element.Project);
+          // copy of render
           if (render) {
             let zone = render.findOne(n => n.name === "Zone") as RectangleNode;
             if (zone) {
-              let zoneHeight = zone.height;
+              let containerWidth = imageContainer.width;
+              let containerHeight = imageContainer.height;
               let zoneWidth = zone.width;
-              imageContainer.resize(zoneWidth, zoneHeight);
+              let zoneHeight = zone.height;
+              let scale: number;
+              if (zoneWidth <= 0 || zoneHeight <= 0 || containerWidth <= 0 || containerHeight <= 0) {
+                scale = 1;
+              } else {
+                let scaleX = containerWidth / zoneWidth;
+                let scaleY = containerHeight / zoneHeight;
+                scale = Math.min(scaleX, scaleY);
+                // check if image is smaller than container and if so, scale it to the container size
+                if ((render.width * scale < containerWidth) || (render.height * scale < containerHeight)) {
+                  scale = Math.max(scaleX, scaleY);
+                }
+                // calculate position of render after scaling with half of zone size
+                let renderCopy = render.findOne(n => n.name === "Render")?.clone();
+                renderCopy?.resize(render.width * scale, render.height * scale);
+                let zoneCentre = {
+                  x: (zone.x + zone.width  / 2) * scale,
+                  y: (zone.y + zone.height / 2) * scale,
+                };
+                let containerCentre = {
+                  x: imageContainer.width  / 2,
+                  y: imageContainer.height / 2,
+                };
+                renderCopy.x = containerCentre.x - zoneCentre.x;
+                renderCopy.y = containerCentre.y - zoneCentre.y;
+                imageContainer.appendChild(renderCopy);
+              }
             }
           }
         }
       }
-      // componentSets.forEach((set) => {
-      //   let sizeContainer = figma.createFrame();
-      //   sizeContainer.name = "SizeContainer";
-      //   sizeContainer.layoutMode = "HORIZONTAL";
-      //   sizeContainer.itemSpacing = 24;
-      //   sizeContainer.primaryAxisSizingMode = "AUTO";
-      //   sizeContainer.counterAxisSizingMode = "AUTO";
-      //   sizeContainer.fills = [];
-      //   autoLayoutFrame.appendChild(sizeContainer);
-      //   let variant = set.defaultVariant;
-      //   let instance = variant.createInstance();
-      //   // Тут мы получаем списком все проперти без их значений
-      //   let propertyNames = Object.keys(instance.componentProperties);
-      //   // Тут мы присваиваем значения проперти
-      //   propertyNames.forEach((name) => {
-      //     try {
-      //       instance.setProperties({ [name]: tableContent[name] });
-      //     } catch (e) {
-      //       console.warn(
-      //         `Could not set property "${name}" to "${tableContent[name]}". Falling back to default variant for this property. Error: ${e}`
-      //       );
-      //       // Instance already defaults to defaultVariant, so no explicit action needed here.
-      //     }
-      //   });
-      //   sizeContainer.appendChild(instance);
-      //   let textLayers = instance.findAll((node) => node.type === "TEXT");
-      //   // Тут мы присваиваем значения текстам
-      //   textLayers.forEach((e) => {
-      //     if (e.name in tableContent) {
-      //       let textToChange = instance.findOne(
-      //         (node) => node.name === e.name
-      //       ) as TextNode;
-      //       textToChange.characters = tableContent[e.name];
-      //     } else {
-      //       console.log("No table content for", e.name);
-      //     }
-      //   });
-      //   let tallestMessage = 0;
-      //   sizeContainer
-      //     .findAll((node) => node.name === "MessageText")
-      //     .forEach((messageText) => {
-      //       let messageHeight = messageText.height;
-      //       if (messageHeight > tallestMessage) {
-      //         tallestMessage = messageHeight;
-      //       }
-      //     });
-      //   sizeContainer
-      //     .findAll((node) => node.name === "MessageText")
-      //     .forEach((node) => {
-      //       let textNode = node as TextNode;
-      //       if (textNode.height < tallestMessage) {
-      //         let text = textNode.characters;
-      //         textNode.characters = text + "\n";
-      //         if (textNode.height < tallestMessage) {
-      //           text = textNode.characters;
-      //           textNode.characters = text + "\n";
-      //         }
-      //       }
-      //     });
-      //   // calculate image container and image
-      //   let imageContainer = instance.findOne(
-      //     (node) => node.name === "PicPlate"
-      //   ) as FrameNode;
-      //   if (imageContainer) {
-      //     // get height and width of imageContainer
-      //     let imageContainerHeight = imageContainer.height;
-      //     let imageContainerWidth = imageContainer.width;
-      //     let render = getImage(tableContent.project);
-      //     // inside render find square named "Zone" and get it's size
-      //     let zone = render.findOne(
-      //       (node) => node.name === "Zone"
-      //     ) as RectangleNode;
-      //     if (zone) {
-      //       let zoneHeight = zone.height;
-      //       let zoneWidth = zone.width;
-      //       console.log(render?.name, zoneHeight, zoneWidth);
-      //     }
-      //   }
-      // });
     }
 
     let template = getTemplates();
-    msg.file.forEach((element: any) => {
-      console.log(element);
-      let page = unitPage(element.Unit);
-      createFrames(template, element, page);
-    });
+    if (template) {
+      msg.file.forEach((element: any) => {
+        let page = unitPage(element.Unit) as PageNode;
+        createFrames(template, element, page);
+      });
+    }
     figma.closePlugin();
   }
 };
