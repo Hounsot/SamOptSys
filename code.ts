@@ -32,16 +32,26 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
       newPage.name = name;
       let projectsFrame = figma.createFrame();
       projectsFrame.name = "Projects";
-      projectsFrame.layoutMode = "HORIZONTAL";
-      projectsFrame.itemSpacing = 48;
-      projectsFrame.paddingTop = 48;
-      projectsFrame.paddingBottom = 48;
-      projectsFrame.paddingLeft = 48;
+      projectsFrame.layoutMode = "VERTICAL";
+      projectsFrame.itemSpacing = 480;
       projectsFrame.primaryAxisSizingMode = "AUTO";
       projectsFrame.counterAxisSizingMode = "AUTO";
-      projectsFrame.paddingRight = 48;
       newPage.appendChild(projectsFrame);
       return newPage;
+    }
+    function projectLayout(name: string, parent: SceneNode) {
+      let project = parent.findOne((node) => node.name === name);
+      if (project) {
+        return project;
+      }
+      let newProject = figma.createFrame();
+      newProject.name = name;
+      newProject.layoutMode = "HORIZONTAL";
+      newProject.itemSpacing = 48;
+      newProject.primaryAxisSizingMode = "AUTO";
+      newProject.counterAxisSizingMode = "AUTO";
+      parent.appendChild(newProject);
+      return newProject;
     }
     // Находим изображение по имени
     function getImage(name: string) {
@@ -60,7 +70,7 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
     }
 
     // if element with this id already exist
-    function projectExist(id: string) {
+    function advertisementExist(id: string) {
       let element = figma.root.findOne((node) => node.name.includes(id));
       if (element) {
         return element;
@@ -81,22 +91,14 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
         Id: element.Id,
       };
       let autoLayoutFrame;
-      if (projectExist(meta.Id) != false) {
-        let project = projectExist(meta.Id) as SceneNode;
+      if (advertisementExist(meta.Id) != false) {
+        let project = advertisementExist(meta.Id) as SceneNode;
         // remove all contents
-        project
-          .findAll((n) => n.type === "FRAME")
-          .forEach((n) => {
+        project.findAll((n) => n.type === "FRAME").forEach((n) => {
             if (!n.removed) {
               n.remove();
             }
           });
-        // project.findAll(n => n.type === "TEXT").forEach(n => n.remove());
-        // project.findAll(n => n.type === "VECTOR").forEach(n => n.remove());
-        // project.findAll(n => n.type === "RECTANGLE").forEach(n => n.remove());
-        // project.findAll(n => n.type === "ELLIPSE").forEach(n => n.remove());
-        // project.findAll(n => n.type === "BOOLEAN_OPERATION").forEach(n => n.remove());
-        // project.findAll(n => n.type === "BOOLEAN_OPERATION").forEach(n => n.remove());
         autoLayoutFrame = project;
       } else {
         autoLayoutFrame = figma.createFrame();
@@ -118,7 +120,8 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
         let projectsFrame = page.findOne(
           (node) => node.name === "Projects"
         ) as FrameNode;
-        projectsFrame.appendChild(autoLayoutFrame);
+        let projectFrame = projectLayout(meta.Project, projectsFrame);
+        projectFrame.appendChild(autoLayoutFrame);
       }
       for (let set of componentSets) {
         let sizeContainer = figma.createFrame();
