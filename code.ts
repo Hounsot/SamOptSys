@@ -4,8 +4,8 @@ figma.showUI(__html__);
 figma.ui.onmessage = async (msg: { type: string; file: any }) => {
   if (msg.type === "importCsv") {
     // Загружаем шрифты
-    await figma.loadFontAsync({ family: "Suisse Intl", style: "Regular" });
-    await figma.loadFontAsync({ family: "Suisse Intl", style: "SemiBold" });
+    await figma.loadFontAsync({ family: "Inter", style: "Regular" });
+    await figma.loadFontAsync({ family: "Inter", style: "Semi Bold" });
 
     // Загружаем все страницы
     await figma.loadAllPagesAsync();
@@ -33,23 +33,26 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
       let projectsFrame = figma.createFrame();
       projectsFrame.name = "Projects";
       projectsFrame.layoutMode = "VERTICAL";
-      projectsFrame.itemSpacing = 480;
+      projectsFrame.itemSpacing = 960;
       projectsFrame.primaryAxisSizingMode = "AUTO";
       projectsFrame.counterAxisSizingMode = "AUTO";
+      projectsFrame.fills = [];
       newPage.appendChild(projectsFrame);
       return newPage;
     }
     function projectLayout(name: string, parent: SceneNode) {
       let project = parent.findOne((node) => node.name === name);
       if (project) {
+        (project as unknown as FrameNode).fills = [];
         return project;
       }
       let newProject = figma.createFrame();
       newProject.name = name;
       newProject.layoutMode = "HORIZONTAL";
-      newProject.itemSpacing = 48;
+      newProject.itemSpacing = 96;
       newProject.primaryAxisSizingMode = "AUTO";
       newProject.counterAxisSizingMode = "AUTO";
+      newProject.fills = [];
       parent.appendChild(newProject);
       return newProject;
     }
@@ -95,10 +98,10 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
         let project = advertisementExist(meta.Id) as SceneNode;
         // remove all contents
         project.findAll((n) => n.type === "FRAME").forEach((n) => {
-            if (!n.removed) {
-              n.remove();
-            }
-          });
+          if (!n.removed) {
+            n.remove();
+          }
+        });
         autoLayoutFrame = project;
       } else {
         autoLayoutFrame = figma.createFrame();
@@ -120,6 +123,7 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
         let projectsFrame = page.findOne(
           (node) => node.name === "Projects"
         ) as FrameNode;
+        projectsFrame.fills = [];
         let projectFrame = projectLayout(meta.Project, projectsFrame);
         projectFrame.appendChild(autoLayoutFrame);
       }
@@ -171,25 +175,21 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
                   rawValue.startsWith("**") &&
                   segmentText === ""
                 ) {
-                  // This is the empty part at the beginning from "**something"
-                  // The next actual text segment will be bold. isNextSegmentBold is already true.
                   continue;
                 }
 
                 if (segmentText.length > 0) {
                   const start = textNode.characters.length;
-                  // Using insertCharacters might be slightly safer if textNode can have existing content
-                  // but since we clear it, appending to textNode.characters and then styling would also work.
                   textNode.insertCharacters(start, segmentText, "AFTER");
 
                   const styleToApply = isNextSegmentBold
-                    ? "SemiBold"
+                    ? "Semi Bold"
                     : "Regular";
                   // Need to await this, as setRangeFontName is async
                   await textNode.setRangeFontName(
                     start,
                     start + segmentText.length,
-                    { family: "Suisse Intl", style: styleToApply }
+                    { family: "Inter", style: styleToApply }
                   );
                 }
 
@@ -206,19 +206,17 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
               }
             } else if (typeof rawValue === "string") {
               textNode.characters = rawValue;
-              // Optionally, ensure the whole text is set to Regular if no markdown is present
               if (rawValue.length > 0) {
                 await textNode.setRangeFontName(0, rawValue.length, {
-                  family: "Suisse Intl",
+                  family: "Inter",
                   style: "Regular",
                 });
               }
             } else {
-              // Handle non-string values if necessary, e.g. numbers
               textNode.characters = String(rawValue);
               if (textNode.characters.length > 0) {
                 await textNode.setRangeFontName(0, textNode.characters.length, {
-                  family: "Suisse Intl",
+                  family: "Inter",
                   style: "Regular",
                 });
               }
@@ -301,8 +299,6 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
 
                   const coverage = willCover(scale);
                   if (!coverage.isFullyCovered) {
-                    // Now you can check coverage.xCovered and coverage.yCovered
-                    // For example, to see if it's not covered horizontally:
                     if (!coverage.xCovered) {
                       let scaleFactor = containerWidth / render.width;
                       renderCopy.resize(
@@ -353,14 +349,6 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
                       renderCopy.x = containerCentre.x - zoneCentre.x;
                       renderCopy.y = containerCentre.y - zoneCentre.y;
                     }
-                    // The following comments may refer to an earlier state of the logic for fitting/covering.
-                    // If you need to make it fit *within* bounds after finding it doesn't cover,
-                    // you might need to re-calculate scale or adjust x/y.
-                    // The current `resize()` call within this block seems to be missing arguments.
-                    // If the goal is to ensure it *covers*, the logic might involve Math.max for scaling,
-                    // or specific adjustments based on which dimension is lacking.
-                    // The current `renderCopy.resize()` without arguments might be an error or placeholder.
-                    // If you want to resize it to cover, you'd need a different strategy than the current code.
                   }
                   imageContainer.appendChild(renderCopy);
                 }
@@ -374,6 +362,26 @@ figma.ui.onmessage = async (msg: { type: string; file: any }) => {
     let template = getTemplates();
     if (template) {
       msg.file.forEach((element: any) => {
+        // normalize CSV values that may be quoted or padded by spaces
+        const normalize = (v: any) => {
+          if (v === undefined || v === null) return "";
+          let s = String(v).trim();
+          if (s.startsWith('"') && s.endsWith('"')) {
+            s = s.slice(1, -1);
+          }
+          return s.trim();
+        };
+
+        const autoValue = normalize((element as any).auto ?? (element as any).Auto);
+        const statusValue = normalize((element as any).status ?? (element as any).Status);
+
+        const isAuto = autoValue.toLowerCase() === "true";
+        const isReadyStatus = statusValue.toLowerCase() === "взять в работу";
+
+        if (!(isAuto && isReadyStatus)) {
+          return; // пропустить этот проект если не отмечен для авто и статус "взять в работу"
+        }
+
         let page = unitPage(element.Unit) as PageNode;
         createFrames(template, element, page);
       });
